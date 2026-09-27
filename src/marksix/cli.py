@@ -22,7 +22,7 @@ from .probability import UNIFORM_LOGP
 
 # Exogenous generation boundaries, never estimated from outcomes.
 MACHINE_RESET_DATES = ("2010-11-09", "2026-05-05")
-# Earlier Mark Six draws used 45 or 47 numbers, so the 6-of-49 null does not apply.
+# Earlier Mark Six draws used fewer than 49 numbers, so the 6-of-49 null does not apply.
 FIRST_SIX_OF_49_DRAW = "2002-07-04"
 
 
@@ -34,10 +34,20 @@ def run(input_path, output_path, *, warmup=60, reset_date=None, seed=20260914,
         dataset_kind="user_supplied_unverified"):
     """Evaluate inputs without changing them; refuse to replace any output.
 
-    ``reset_date`` is None, one YYYY-MM-DD string, or a list of them.
+    ``reset_date`` is None, one YYYY-MM-DD string, or a list of them. Pass
+    ``dataset_kind="synthetic_demo"`` only for generated data: its artificial
+    dates skip the known machine changes.
     """
     if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or seed < 0:
         raise ValueError("seed must be a non-negative integer")
+    seed = int(seed)
+    if isinstance(reset_date, str):
+        requested = [reset_date]
+    else:
+        try:
+            requested = list(reset_date or ())
+        except TypeError as error:
+            raise ValueError("reset_date must be a YYYY-MM-DD string or a list of them") from error
     output = Path(output_path)
     if output.exists():
         raise ValueError("Output already exists; choose a new directory")
@@ -45,21 +55,22 @@ def run(input_path, output_path, *, warmup=60, reset_date=None, seed=20260914,
     data = load_draws_bytes(input_bytes)
     if data.dates[0] < FIRST_SIX_OF_49_DRAW:
         raise ValueError(f"Input starts {data.dates[0]}, but draws before {FIRST_SIX_OF_49_DRAW} "
-                         "used 45 or 47 numbers and cannot be scored against the 6-of-49 null")
+                         "used fewer than 49 numbers and cannot be scored against the 6-of-49 null")
     # Synthetic dates are artificial indices, not days on a physical machine.
     reset_dates = set() if dataset_kind == "synthetic_demo" else set(MACHINE_RESET_DATES)
-    for requested in [reset_date] if isinstance(reset_date, str) else reset_date or ():
+    for text in requested:
         try:
-            boundary = date.fromisoformat(requested).isoformat()
-        except ValueError:
+            boundary = date.fromisoformat(text).isoformat()
+        except (TypeError, ValueError):
             boundary = None
-        if boundary != requested:
-            raise ValueError(f"reset-date must use YYYY-MM-DD, got {requested!r}")
+        if not isinstance(text, str) or boundary != text:
+            raise ValueError(f"reset-date must use YYYY-MM-DD, got {text!r}")
         reset_dates.add(boundary)
     reset_dates = sorted(reset_dates)
     reset_indices = sorted({next((i for i, d in enumerate(data.dates) if d >= boundary),
                                 len(data.dates)) for boundary in reset_dates})
     result = walk_forward(data.outcomes, warmup=warmup, reset_indices=reset_indices)
+    warmup = int(warmup)
     summary = {"schema_version": 1, "dataset_kind": dataset_kind,
                "input_draws": len(data.dates), "warmup_draws": warmup,
                "evaluation_draws": len(result["indices"]),
@@ -69,11 +80,11 @@ def run(input_path, output_path, *, warmup=60, reset_date=None, seed=20260914,
                "evaluation_start": data.dates[warmup], "evaluation_end": data.dates[-1],
                "models": summarize(result, data.outcomes, seed=seed),
                "interpretation": "Log-score gains measure forecast quality, not cash return. Synthetic data cannot establish a physical effect."}
-    provenance = {"schema_version": 1, "dataset_kind": dataset_kind,
+    provenance = {"schema_version": 2, "dataset_kind": dataset_kind,
                   "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
                   "package_version": __version__, "python": platform.python_version(),
                   "numpy": np.__version__, "scipy": scipy.__version__,
-                  "seed": seed, "reset_date": reset_date, "reset_dates": reset_dates,
+                  "seed": seed, "reset_date": requested, "reset_dates": reset_dates,
                   "reset_indices": reset_indices, "warmup_draws": warmup,
                   "machine_policy": "independent_generation_fit_no_transfer",
                   "physical_measurements": "not_available; fitted statistical effects only",
@@ -125,8 +136,10 @@ def main(argv=None):
         sub.add_argument("--output", required=True, help="New output directory; existing paths are rejected")
         sub.add_argument("--warmup", type=int, default=60, help="Initial draws used only for training (default: 60)")
         sub.add_argument("--seed", type=int, default=20260914, help="Non-negative seed for generation and bootstrap")
+        known = ("known machine changes always reset" if name == "evaluate"
+                 else "the artificial demo dates skip known machine changes")
         sub.add_argument("--reset-date", action="append",
-                         help="Additional pre-specified YYYY-MM-DD boundary (repeatable); known machine changes always reset")
+                         help=f"Additional pre-specified YYYY-MM-DD boundary (repeatable); {known}")
         if name == "evaluate":
             sub.add_argument("--input", required=True, help="CSV with date, draw_id, and n1 through n6")
         else:

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "dataset_kind": "synthetic_demo",
   "input_sha256": "87679a583a56e79ccd7a491d97b73471038df5ab78bba53ce39e1fb1e505864f",
   "package_version": "0.1.0",
@@ -7,7 +7,7 @@
   "numpy": "1.26.4",
   "scipy": "1.17.1",
   "seed": 20260914,
-  "reset_date": null,
+  "reset_date": [],
   "reset_dates": [],
   "reset_indices": [],
   "warmup_draws": 60,
@@ -37,10 +37,10 @@
   "source_hashes": {
     "__init__.py": "b06af72ddc20edaa0fccb83b7e2ada9d4064c9c4da8a7601f0dbb2a5a5fcc720",
     "__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
-    "cli.py": "fadb1d7de5e24ba106734aa8d96b3ded9e6cf3e4e3761e06bf85a03f097c96b6",
-    "data.py": "e319cd33fdaf95c79247adcf86e924cd474cbce41d40a3185b48baf5ef906827",
-    "evaluation.py": "60cf58aebb1f72aeca60907620a77a96c6149b6c0134471e597ff87f48efaa86",
+    "cli.py": "c1e268e5a099cf6bd2fe9f10fa8b81c382d630f02df382497b56832dde4bd698",
+    "data.py": "99ff779b1356df8bf48dc3326a202d451a0d78bec3adc613df0d53b0f2c99fb6",
+    "evaluation.py": "74ae8ea7d7b3b78ddcd13ed4869ff6fce064c78a05cfaa5a6ea18e575c7763ca",
     "probability.py": "b74a7901df2e91f574f07f9b16ebc578c0944747691ac7c5d3d5559b37ce0ce0",
-    "sparse.py": "4c0382de88259808ad714592b2cf4f67f951b61be1bae25bc8f2b6c6f7a6b73f"
+    "sparse.py": "f220da84d4ded158b4e3bae5633a20cb345fff81b3c6d4db89c2d9420eb2a383"
   }
 }

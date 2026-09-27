@@ -12,7 +12,6 @@ is an approximation and does not preserve this exact mixture law.
 """
 from __future__ import annotations
 
-import math
 import numbers
 
 import numpy as np
@@ -24,7 +23,7 @@ DRAW_SIZE = 6
 P0 = DRAW_SIZE / N_BALLS
 
 
-def _validate(y, strength: float, mass: float) -> tuple[np.ndarray, int]:
+def _validate(y, strength: float, mass: float) -> tuple[np.ndarray, int, float, float]:
     if np.iscomplexobj(y):
         raise ValueError("Training draws must contain real indicators")
     try:
@@ -37,14 +36,16 @@ def _validate(y, strength: float, mass: float) -> tuple[np.ndarray, int]:
         raise ValueError("Draw indicators must be finite zeros and ones")
     if not np.all(y.sum(axis=1) == DRAW_SIZE):
         raise ValueError("Each training draw must contain exactly six distinct main balls")
-    # Above 1e8, beta-function differences lose more than about 1e-7 nats.
+    # Above 1e8, beta-function differences lose more than about 1e-7 nats;
+    # far below 1e-300 the prior parameters leave the normal float range.
+    # Range checks also reject NaN and infinity without converting to float.
     if (isinstance(strength, (bool, np.bool_)) or not isinstance(strength, numbers.Real)
-            or not math.isfinite(strength) or not 0 < strength <= 1e8):
-        raise ValueError("strength must be positive and at most 1e8")
+            or not 1e-300 <= strength <= 1e8):
+        raise ValueError("strength must lie between 1e-300 and 1e8")
     if (isinstance(mass, (bool, np.bool_)) or not isinstance(mass, numbers.Real)
-            or not math.isfinite(mass) or not 0 <= mass <= 1):
+            or not 0 <= mass <= 1):
         raise ValueError("Prior alternative probability must lie in [0, 1]")
-    return y.sum(axis=0), len(y)
+    return y.sum(axis=0), len(y), float(strength), float(mass)
 
 
 def _validate_flags(hot_only, return_diagnostics):
@@ -60,13 +61,13 @@ def _log_survival(a, b, threshold=P0) -> np.ndarray:
     The ordinary calculation uses the complement incomplete beta directly.
     For extreme tails, integrate a rescaled beta density from the threshold;
     the scale puts its boundary-decay width near one and avoids exp(-1000).
-    Subnormal survival values keep too few significant bits, so they also
-    take the integral path.
+    Values below 1e-300 also take the integral path: subnormal results keep
+    too few bits, and SciPy 1.13 loses about six digits just above them.
     """
     a, b = np.broadcast_arrays(np.asarray(a, float), np.asarray(b, float))
     survival = betaincc(a, b, threshold)
     result = np.full(a.shape, -np.inf, dtype=float)
-    valid = survival >= np.finfo(float).tiny
+    valid = survival >= 1e-300
     result[valid] = np.log(survival[valid])
     for index in zip(*np.where(~valid)) if a.ndim else ([()] if not valid else []):
         aa, bb = float(a[index]), float(b[index])
@@ -128,7 +129,7 @@ def sparse_prediction(
     Return q, or (q, diagnostics) if return_diagnostics=True.
     """
     _validate_flags(hot_only, return_diagnostics)
-    counts, n = _validate(y, strength, alt_mass)
+    counts, n, strength, alt_mass = _validate(y, strength, alt_mass)
     log_bf, posterior_mean = _evidence(counts, n, strength, hot_only)
     null_log_mass = np.log1p(-alt_mass) if alt_mass < 1 else -np.inf
     alternative_log_mass = np.log(alt_mass/N_BALLS) if alt_mass > 0 else -np.inf
@@ -174,7 +175,7 @@ def spike_slab_prediction(
     No empirical-Bayes tuning is performed on the observed sample.
     """
     _validate_flags(hot_only, return_diagnostics)
-    counts, n = _validate(y, strength, bias_probability)
+    counts, n, strength, bias_probability = _validate(y, strength, bias_probability)
     log_bf, posterior_mean = _evidence(counts, n, strength, hot_only)
     if bias_probability == 0:
         posterior_bias = np.zeros(N_BALLS)

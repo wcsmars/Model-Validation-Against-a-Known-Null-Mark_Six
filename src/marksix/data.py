@@ -31,7 +31,8 @@ def load_draws_bytes(content: bytes) -> DrawData:
         try:
             _read_rows(reader, dates, ids, outcomes)
         except csv.Error as error:
-            raise ValueError(f"Malformed CSV near line {reader.line_num}: {error}") from error
+            # The wrapped reader counts the line that failed; DictReader lags.
+            raise ValueError(f"Malformed CSV at line {reader.reader.line_num}: {error}") from error
     if not outcomes:
         raise ValueError("CSV has no draws")
     return DrawData(tuple(dates), tuple(ids), np.stack(outcomes))
@@ -46,7 +47,7 @@ def _read_rows(reader: csv.DictReader, dates: list, ids: list, outcomes: list) -
     seen_ids = set()
     for row in reader:
         # Physical line of the record's end, so blank lines do not shift it.
-        line = reader.line_num
+        line = reader.reader.line_num
         try:
             if None in row or None in row.values():
                 raise ValueError("Malformed CSV row: field count differs from the header")

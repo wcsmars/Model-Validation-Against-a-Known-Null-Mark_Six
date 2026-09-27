@@ -40,7 +40,7 @@ def walk_forward(y, *, warmup=60, reset_index=None, reset_indices=()):
     if any(isinstance(b, (bool, np.bool_)) or not isinstance(b, (int, np.integer))
            or not 0 <= b <= len(y) for b in boundaries):
         raise ValueError("reset_indices must contain valid draw indices")
-    boundaries = sorted(set(boundaries))
+    boundaries = sorted({int(b) for b in boundaries})
     indices = np.arange(warmup, len(y))
     probabilities, all_marginals, mixture_history = [], [], []
     weights = MIXTURE_PRIOR.copy()
@@ -96,6 +96,7 @@ def block_uncertainty(gains, *, seed=20260914, replicates=2000, block_length=8):
     if (not isinstance(block_length, (int, np.integer)) or isinstance(block_length, bool)
             or block_length < 1):
         raise ValueError("block_length must be a positive integer")
+    replicates, block_length = int(replicates), int(block_length)
     n = len(x)
     if n < max(32, 4 * block_length):
         raise ValueError("Bootstrap needs at least 32 draws and four blocks")

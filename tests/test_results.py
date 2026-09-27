@@ -39,7 +39,9 @@ def test_published_demo_matches_current_code(tmp_path):
     write_synthetic(source)
     run(source, tmp_path / "demo", dataset_kind="synthetic_demo")
     fresh = tmp_path / "demo"
-    assert sorted(p.name for p in DEMO.iterdir()) == sorted(p.name for p in fresh.iterdir())
+    # Hidden files such as .DS_Store are local clutter that git ignores.
+    published = sorted(p.name for p in DEMO.iterdir() if not p.name.startswith("."))
+    assert published == sorted(p.name for p in fresh.iterdir()), REGENERATE
     assert (DEMO / "synthetic_draws.csv").read_bytes() == source.read_bytes()
 
     saved = json.loads((DEMO / "provenance.json").read_text(encoding="utf-8"))

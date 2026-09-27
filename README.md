@@ -30,7 +30,7 @@ python3 -m marksix evaluate --input path/to/draws.csv --output results/custom --
 
 Required columns are `date`, `draw_id`, and `n1` through `n6`. Every row must have the same number of fields as the header. Dates must be unique, strictly increasing `YYYY-MM-DD` values on or after **4 July 2002**, when Mark Six moved from 47 to 49 numbers; earlier draws cannot be scored against this null, and a reset does not make them valid. IDs must be nonempty and unique. Each outcome must contain six distinct integers from 1 to 49. An optional populated `extra` column must contain a seventh distinct number; it does not enter the main-set forecast score.
 
-Known machine changes on **9 November 2010** and **5 May 2026** automatically clear training history and mixture weights at the first available draw on or after each boundary. `--reset-date YYYY-MM-DD` adds another predetermined boundary and can be repeated; it cannot disable those resets. Old-machine observations never train new-machine effects. Resets mark machine generations: draws completed on a same-model backup machine after a live fault, such as 14/108 (20 September 2014) and 26/099 (12 September 2026), stay within their generation. Warmup applies once, at the beginning of the dataset. A reset can therefore produce a forecast from the prior alone. The synthetic demo's dates are artificial, so it applies only `--reset-date` boundaries.
+Known machine changes on **9 November 2010** and **5 May 2026** automatically clear training history and mixture weights at the first available draw on or after each boundary; the synthetic demo skips them because its dates are artificial. `--reset-date YYYY-MM-DD` adds another predetermined boundary and can be repeated; it cannot disable those resets. Old-machine observations never train new-machine effects. Resets mark machine generations: draws completed on a same-model backup machine with its backup ball set after a live fault, such as 14/108 (20 September 2014) and 26/099 (12 September 2026), are deliberately not treated as resets. Warmup applies once, at the beginning of the dataset. A reset can therefore produce a forecast from the prior alone.
 
 This CLI is a research evaluator and does not authorize a bet. Operational use requires **expected gross payout strictly greater than HK$10 for every full HK$10 line**, under a normalized forecast and stated, verified pre-draw payout inputs. Equality does not qualify. Number predictions must not depend on player popularity, ticket sales, or jackpot size; monetary valuation follows prediction and uses identical sharing assumptions for every combination. No physical chamber or ball measurements are supplied by these statistical models.
 
@@ -56,13 +56,13 @@ Z(z) = sum over six-element sets A of exp(sum(z[i] for i in A))
 
 Dynamic programming computes the normalizer and marginals in log space. Marginals sum to six. Conditioning on set size changes the input propensity moments: this conversion is a projection. The spike-and-slab updates also use a composite approximation because ball indicators within a draw are dependent.
 
-The mixture starts with weights `[0.5, 0.25, 0.25]`. It combines component probabilities, then updates weights **after** scoring the outcome, with learning rate `0.25` and a `1%` blend back to the initial prior. Per-draw score differences are small, so the blend keeps the weights close to the prior: a steady edge of 0.024 nats per draw, what an oracle gains from one ball drawn 20% of the time, still leaves the uniform weight near 0.36. All component forecasts use preceding draws only.
+The mixture starts with weights `[0.5, 0.25, 0.25]`. It combines component probabilities, then updates weights **after** scoring the outcome, with learning rate `0.25` and a `1%` blend back to the initial prior. The blend limits how far the weights can drift: even if both nonuniform components kept a constant edge of 0.024 nats per draw, an oracle's expected gain when one ball is drawn 20% of the time, the uniform weight would settle near 0.36 rather than approach zero. All component forecasts use preceding draws only.
 
 ## Evaluation
 
 Log-score gain is `log P_model(observed set) - log P_uniform(observed set)`, measured in nats. Positive gain means a better score on the evaluated outcomes; it is not a cash return. Brier gain measures reduction in mean squared error across the 49 inclusion probabilities.
 
-The evaluator uses 2,000 circular block-bootstrap resamples with eight-draw blocks. Entire draws are resampled together across models. Percentile confidence intervals describe mean gain per draw. One-sided p-values use the centered bootstrap distribution, so for skewed gains an interval can exclude zero while p stays above 0.025, or the reverse. Holm adjustment covers the three nonuniform forecasts. For fewer than 32 evaluated draws, nonbaseline confidence intervals and p-values are omitted.
+The evaluator uses 2,000 circular block-bootstrap resamples with eight-draw blocks. Entire draws are resampled together across models. Percentile confidence intervals describe mean gain per draw. One-sided p-values use the centered bootstrap distribution, so for skewed gains an interval can lie entirely above zero while p stays above 0.025, or the reverse. Holm adjustment covers the three nonuniform forecasts. For fewer than 32 evaluated draws, nonbaseline confidence intervals and p-values are omitted.
 
 Chronological fitting prevents target leakage within an evaluation. It does not correct model selection informed by the evaluation period. Bootstrap summaries also depend on assumptions about temporal dependence and stationarity, especially around regime changes.
 
@@ -85,14 +85,15 @@ python3 -m pip install -e '.[plots]'
 python3 scripts/render_figures.py
 ```
 
-`tests/test_results.py` fails when the reference run no longer matches the current code, including its recorded source hashes. After changing `src/marksix`, regenerate it before the figures:
+`tests/test_results.py` fails when the reference run no longer matches the current code, including its recorded source hashes. After changing `src/marksix`, regenerate the run and then the figures:
 
 ```sh
 rm -r results/demo
 python3 -m marksix demo --output results/demo
+python3 scripts/render_figures.py
 ```
 
-Keep private inputs in `data/` or `private/`. Git ignores those folders, dataset files such as `*.csv` and `*.xlsx`, and everything under `results/` except the published files listed above.
+Keep private inputs in `data/` or `private/`. Git ignores those folders, credential files, dataset and run-output formats such as `*.csv` and `*.json`, and everything under `results/` except `research_summary.json`, the two figures, and the four files in `results/demo/`.
 
 ```text
 src/marksix/       Probability models, input validation, evaluation, and CLI

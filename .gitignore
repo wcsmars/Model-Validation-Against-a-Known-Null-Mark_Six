@@ -1,6 +1,7 @@
 .*
 !.github/
 !.gitignore
+!.gitattributes
 
 # Local configuration and credentials
 .env
@@ -9,34 +10,46 @@
 config.local.*
 config.yaml
 config.yml
-config.json
-credentials.yaml
-credentials.yml
-credentials.json
+config.toml
+*credentials*
 secrets.*
 secret.*
-token.json
-tokens.json
-credentials/
+secrets/
+client_secret*
+service-account*
+token*.txt
+password*
+cookies*.txt
 private/
 *.key
 *.pem
 *.p12
 *.pfx
+*.ppk
 id_rsa*
+id_dsa*
+id_ecdsa*
 id_ed25519*
 
-# Private data and operational records
+# Private data and operational records (these folder names match at any depth;
+# force-add a public test fixture with `git add -f`)
 data/
 statements/
 execution_logs/
+logs/
 *.log
+*.log.*
 
-# Draw tables and other datasets; published files are re-included below
+# Draw tables, API responses, run outputs and other datasets; the published
+# results are re-included below
 *.csv
 *.tsv
+*.json
+*.jsonl
+*.ndjson
 *.xls
 *.xlsx
+*.ods
 *.parquet
 *.feather
 *.db
@@ -44,6 +57,12 @@ execution_logs/
 *.sqlite3
 *.pkl
 *.pickle
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.zip
+*.gz
 
 # Python and editor artifacts
 __pycache__/

@@ -1,4 +1,5 @@
 """Validate sparse priors, symmetry, limits, and input boundaries."""
+from fractions import Fraction
 from unittest.mock import patch
 
 import numpy as np
@@ -96,6 +97,14 @@ def test_tiny_strength_stays_finite_when_a_ball_is_always_drawn(hot_only):
     assert_allclose(q.sum(), 6)
 
 
+def test_exact_rational_settings_match_floats():
+    y = training_draws(30)
+    assert_allclose(sparse_prediction(y, strength=Fraction(20), alt_mass=Fraction(1, 2)),
+                    sparse_prediction(y, strength=20.0, alt_mass=0.5))
+    assert_allclose(spike_slab_prediction(y, bias_probability=Fraction(1, 49)),
+                    spike_slab_prediction(y, bias_probability=1 / 49))
+
+
 def test_full_spike_slab_alternative_has_beta_posterior_mean():
     # With no point mass, beta-Bernoulli conjugacy gives this analytic limit.
     y = training_draws(12)
@@ -127,14 +136,14 @@ def test_invalid_training_draws_rejected(predict, bad):
 
 
 @pytest.mark.parametrize("predict", [sparse_prediction, spike_slab_prediction])
-@pytest.mark.parametrize("strength", [0, -1, 1e9, np.nan, np.inf, True, [20], "20"])
+@pytest.mark.parametrize("strength", [0, -1, 1e-301, 1e9, 10**400, np.nan, np.inf, True, [20], "20"])
 def test_invalid_strength_rejected(predict, strength):
     with pytest.raises(ValueError):
         predict(np.empty((0, 49)), strength=strength)
 
 
 @pytest.mark.parametrize("predict,keyword", [(sparse_prediction, "alt_mass"), (spike_slab_prediction, "bias_probability")])
-@pytest.mark.parametrize("mass", [-0.1, 1.1, np.nan, np.inf, True, [0.5], "0.5"])
+@pytest.mark.parametrize("mass", [-0.1, 1.1, -10**400, np.nan, np.inf, True, [0.5], "0.5"])
 def test_invalid_prior_mass_rejected(predict, keyword, mass):
     with pytest.raises(ValueError):
         predict(np.empty((0, 49)), **{keyword: mass})
@@ -172,10 +181,11 @@ def test_survival_fallback_matches_incomplete_beta():
 
 
 def test_hot_posterior_mean_is_smooth_through_subnormal_tail():
-    # Near n=5750 the untruncated survival is subnormal for a never-drawn ball.
+    # For a never-drawn ball the untruncated survival falls below 1e-300 near
+    # n=5340, turns subnormal near n=5480 and underflows near n=5760.
     # E[p | p > P0] must stay above P0 and track the exponential-tail limit.
     means = []
-    for n in range(5700, 5820, 15):
+    for n in range(5300, 5820, 20):
         y = np.zeros((n, 49))
         for i, row in enumerate(y):
             row[[(6 * i + j) % 48 for j in range(6)]] = 1

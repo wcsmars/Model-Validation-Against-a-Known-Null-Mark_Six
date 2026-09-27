@@ -101,6 +101,8 @@ class EvaluationTests(unittest.TestCase):
                 for row in starts])
             np.testing.assert_allclose(np.r_[[lo], [hi]], np.quantile(means, [.025, .975], axis=0))
             np.testing.assert_allclose(p, (1 + (means - x.mean(0) >= x.mean(0)).sum(0)) / 151)
+            small_types = block_uncertainty(x, seed=11, replicates=np.uint8(150), block_length=np.int8(block_length))
+            np.testing.assert_array_equal(np.r_[small_types], np.r_[lo, hi, p])
 
     def test_summary_inference_on_planted_and_fair_draws(self):
         y = hot_ball(240, seed=0)
@@ -184,7 +186,8 @@ class DataAndRunTests(unittest.TestCase):
         cases = {
             'short row': (header + '2000-01-01,A,1,2,3,4,5,6,7\n2000-01-02,B,1,2,3,4,5,6\n', 'line 3: Malformed'),
             'blank lines': (header + '\n\n\n2000-01-01,A,1,2,3,4,5,5,7\n', 'line 5:'),
-            'oversized field': (header + '2000-01-01,' + 'A' * 200000 + ',1,2,3,4,5,6,7\n', 'Malformed CSV'),
+            'oversized field': (header + '2000-01-01,' + 'A' * 200000 + ',1,2,3,4,5,6,7\n', 'at line 2:'),
+            'oversized header': ('A' * 200000 + ',' + header, 'at line 1:'),
         }
         for name, (text, message) in cases.items():
             with self.subTest(name):
@@ -206,6 +209,20 @@ class DataAndRunTests(unittest.TestCase):
             self.assertEqual(provenance['reset_date'], ['2002-10-03', '2002-12-03'])
             self.assertEqual(provenance['reset_dates'], ['2002-10-03', '2002-12-03'])
             self.assertEqual(provenance['reset_indices'], [91, 152])
+
+    def test_run_normalizes_seed_and_reset_date_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_synthetic(root/'input.csv', draws=100)
+            run(root/'input.csv', root/'a', seed=np.int64(5), warmup=np.int64(60),
+                reset_date=('2002-08-01',))
+            provenance = json.loads((root/'a'/'provenance.json').read_text())
+            self.assertEqual((provenance['seed'], provenance['warmup_draws']), (5, 60))
+            self.assertEqual(provenance['reset_date'], ['2002-08-01'])
+            for invalid in [5, [date(2002, 8, 1)], [None], ['2002-8-1']]:
+                with self.subTest(reset_date=invalid), self.assertRaises(ValueError):
+                    run(root/'input.csv', root/'b', reset_date=invalid)
+            self.assertFalse((root/'b').exists())
 
     def test_failed_publish_leaves_no_partial_output(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -282,7 +299,7 @@ class DataAndRunTests(unittest.TestCase):
                     run(source, output)
                     self.assertTrue(output.exists())
                 else:
-                    with self.assertRaisesRegex(ValueError, '45 or 47 numbers'):
+                    with self.assertRaisesRegex(ValueError, 'fewer than 49 numbers'):
                         run(source, output, reset_date='2002-07-04')
                     self.assertFalse(output.exists())
 
