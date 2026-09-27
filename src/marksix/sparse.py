@@ -12,6 +12,7 @@ is an approximation and does not preserve this exact mixture law.
 """
 from __future__ import annotations
 
+import math
 import numbers
 
 import numpy as np
@@ -36,11 +37,12 @@ def _validate(y, strength: float, mass: float) -> tuple[np.ndarray, int]:
         raise ValueError("Draw indicators must be finite zeros and ones")
     if not np.all(y.sum(axis=1) == DRAW_SIZE):
         raise ValueError("Each training draw must contain exactly six distinct main balls")
+    # Above 1e8, beta-function differences lose more than about 1e-7 nats.
     if (isinstance(strength, (bool, np.bool_)) or not isinstance(strength, numbers.Real)
-            or not np.isfinite(strength) or strength <= 0):
-        raise ValueError("strength must be finite and positive")
+            or not math.isfinite(strength) or not 0 < strength <= 1e8):
+        raise ValueError("strength must be positive and at most 1e8")
     if (isinstance(mass, (bool, np.bool_)) or not isinstance(mass, numbers.Real)
-            or not np.isfinite(mass) or not 0 <= mass <= 1):
+            or not math.isfinite(mass) or not 0 <= mass <= 1):
         raise ValueError("Prior alternative probability must lie in [0, 1]")
     return y.sum(axis=0), len(y)
 
@@ -58,11 +60,13 @@ def _log_survival(a, b, threshold=P0) -> np.ndarray:
     The ordinary calculation uses the complement incomplete beta directly.
     For extreme tails, integrate a rescaled beta density from the threshold;
     the scale puts its boundary-decay width near one and avoids exp(-1000).
+    Subnormal survival values keep too few significant bits, so they also
+    take the integral path.
     """
     a, b = np.broadcast_arrays(np.asarray(a, float), np.asarray(b, float))
     survival = betaincc(a, b, threshold)
     result = np.full(a.shape, -np.inf, dtype=float)
-    valid = survival > 0
+    valid = survival >= np.finfo(float).tiny
     result[valid] = np.log(survival[valid])
     for index in zip(*np.where(~valid)) if a.ndim else ([()] if not valid else []):
         aa, bb = float(a[index]), float(b[index])
@@ -89,7 +93,8 @@ def _log_survival(a, b, threshold=P0) -> np.ndarray:
 
 def _evidence(counts: np.ndarray, n: int, strength: float, hot_only: bool):
     alpha, beta = strength*P0, strength*(1-P0)
-    post_alpha, post_beta = alpha+counts, beta+n-counts
+    # Grouping n-counts first keeps post_beta positive when beta is tiny.
+    post_alpha, post_beta = alpha+counts, beta+(n-counts)
     # Combinatorial terms in the binomial count law cancel between models.
     null_log_likelihood = counts*np.log(P0)+(n-counts)*np.log1p(-P0)
     log_bf = betaln(post_alpha, post_beta)-betaln(alpha, beta)-null_log_likelihood

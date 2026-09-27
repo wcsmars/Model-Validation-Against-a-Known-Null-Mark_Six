@@ -1,14 +1,20 @@
 {
   "schema_version": 1,
   "dataset_kind": "synthetic_demo",
-  "input_sha256": "cdb36796093b336ef688c0acd00f5e8fef312ee387c746664992e9e00343d01f",
+  "input_sha256": "87679a583a56e79ccd7a491d97b73471038df5ab78bba53ce39e1fb1e505864f",
   "package_version": "0.1.0",
-  "python": "3.11.7",
+  "python": "3.11.15",
   "numpy": "1.26.4",
   "scipy": "1.17.1",
   "seed": 20260914,
   "reset_date": null,
+  "reset_dates": [],
+  "reset_indices": [],
   "warmup_draws": 60,
+  "machine_policy": "independent_generation_fit_no_transfer",
+  "physical_measurements": "not_available; fitted statistical effects only",
+  "number_selection": "draw_probabilities_only_no_popularity_features",
+  "operational_EV_rule": "expected_gross_HKD_per_full_line > 10; this evaluator does not certify EV",
   "models": [
     "uniform",
     "sparse_single_ball",
@@ -31,10 +37,10 @@
   "source_hashes": {
     "__init__.py": "b06af72ddc20edaa0fccb83b7e2ada9d4064c9c4da8a7601f0dbb2a5a5fcc720",
     "__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
-    "cli.py": "bb6326b432731ab8f8c8b61c0d74501fc90490709ed9ca951aed1c870bfbe9e7",
-    "data.py": "9820697dec86093720dd59a39670dc6b22e3a27848e736e83ec0ff8ad5b30550",
-    "evaluation.py": "98e8b50842411f69cb312e33e1f620fafbd2ac71966f67622eab553990015170",
-    "probability.py": "3663380ad05c66bbc1ff180b392bcac149038adfbb4c117dcd18e798ba6c94db",
-    "sparse.py": "86983f57da623a2349f60046f6181c99df1823a33314a2784be841eae83e5ba7"
+    "cli.py": "fadb1d7de5e24ba106734aa8d96b3ded9e6cf3e4e3761e06bf85a03f097c96b6",
+    "data.py": "e319cd33fdaf95c79247adcf86e924cd474cbce41d40a3185b48baf5ef906827",
+    "evaluation.py": "60cf58aebb1f72aeca60907620a77a96c6149b6c0134471e597ff87f48efaa86",
+    "probability.py": "b74a7901df2e91f574f07f9b16ebc578c0944747691ac7c5d3d5559b37ce0ce0",
+    "sparse.py": "4c0382de88259808ad714592b2cf4f67f951b61be1bae25bc8f2b6c6f7a6b73f"
   }
 }

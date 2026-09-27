@@ -28,9 +28,24 @@ def set_style():
     })
 
 
+def _normalize_svg(path: Path):
+    """Strip trailing spaces and write UTF-8 with LF endings on any platform."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(line.rstrip() for line in lines) + "\n")
+
+
 def render_research(source: Path, destination: Path):
     data = json.loads(source.read_text(encoding="utf-8"))
     rows = data["periods"]["new_machine"]
+    # The figure text and axis limits below state these properties of the data.
+    nonuniform = [row for row in rows if row["model"] != "uniform"]
+    if (len(rows) != 16 or {row["draws"] for row in rows} != {52}
+            or any(not low <= 0 <= high for low, high in (r["mean_95pct_block_ci"] for r in nonuniform))
+            or any(row["holm_p"] < 1 for row in nonuniform)
+            or min(r["mean_95pct_block_ci"][0] for r in rows) < -0.035
+            or max(r["mean_95pct_block_ci"][1] for r in rows) > 0.14):
+        raise ValueError("research_summary.json no longer matches the figure text or axis limits")
     fig, ax = plt.subplots(figsize=(11.8, 9.5))
     fig.subplots_adjust(left=0.345, right=0.965, top=0.84, bottom=0.16)
     for index, row in enumerate(rows):
@@ -72,7 +87,7 @@ def render_research(source: Path, destination: Path):
         "Description": "All 16 historical models. Every nonuniform 95% interval crosses zero. Whole-draw block bootstrap; values from research_summary.json.",
     })
     plt.close(fig)
-    destination.write_text("\n".join(line.rstrip() for line in destination.read_text().splitlines()) + "\n")
+    _normalize_svg(destination)
 
 
 def render_demo(source: Path, destination: Path):
@@ -126,7 +141,7 @@ def render_demo(source: Path, destination: Path):
         "Description": "Four-model evaluation on a generated fair sequence. This is not a historical Mark Six performance result.",
     })
     plt.close(fig)
-    destination.write_text("\n".join(line.rstrip() for line in destination.read_text().splitlines()) + "\n")
+    _normalize_svg(destination)
 
 
 def main():

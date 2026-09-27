@@ -1,6 +1,9 @@
 """Behavioral checks for leakage, mixture arithmetic and synthetic controls."""
+from contextlib import redirect_stderr, redirect_stdout
 import csv
+from datetime import date, timedelta
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -10,8 +13,8 @@ from unittest.mock import patch
 import numpy as np
 from scipy.special import logsumexp
 
-from marksix.cli import run
-from marksix.data import load_draws, write_synthetic
+from marksix.cli import main, run
+from marksix.data import load_draws, load_draws_bytes, write_synthetic
 from marksix.evaluation import MIXTURE_PRIOR, block_uncertainty, holm, summarize, walk_forward
 
 
@@ -21,6 +24,18 @@ def synthetic(n=90, seed=17, planted=False):
     for row in y:
         indices = np.r_[0, rng.choice(np.arange(1, 49), 5, replace=False)] if planted else rng.choice(49, 6, replace=False)
         row[indices] = 1
+    return y
+
+
+def hot_ball(n, seed, p=0.3):
+    """Ball 1 appears with probability p; the remaining mains are uniform."""
+    rng = np.random.default_rng(seed)
+    y = np.zeros((n, 49))
+    for row in y:
+        if rng.random() < p:
+            row[np.r_[0, rng.choice(np.arange(1, 49), 5, replace=False)]] = 1
+        else:
+            row[rng.choice(np.arange(1, 49), 6, replace=False)] = 1
     return y
 
 
@@ -66,13 +81,42 @@ class EvaluationTests(unittest.TestCase):
         np.testing.assert_allclose(a['marginals'][25:], b['marginals'][25:], atol=0, rtol=0)
         np.testing.assert_allclose(a['mixture_weights'][25:], b['mixture_weights'][25:], atol=0, rtol=0)
         np.testing.assert_allclose(a['mixture_weights'][25], MIXTURE_PRIOR)
-        with self.assertRaises(ValueError):
-            walk_forward(y, reset_indices=(float('nan'),))
+        for invalid in [(float('nan'),), (60, True), (60, 60.0), 60]:
+            with self.assertRaises(ValueError):
+                walk_forward(y, reset_indices=invalid)
 
     def test_strong_synthetic_signal_is_detectable(self):
         result = walk_forward(synthetic(140, planted=True), warmup=60)
         gain = result['log_probabilities'][:, 1:] - result['log_probabilities'][:, :1]
         self.assertTrue(np.all(gain.sum(axis=0) > 20))
+
+    def test_bootstrap_matches_loop_reference(self):
+        x = np.random.default_rng(3).normal(size=(45, 3))
+        for block_length in (1, 4, 8):
+            lo, hi, p = block_uncertainty(x, seed=11, replicates=150, block_length=block_length)
+            blocks = -(-len(x) // block_length)
+            starts = np.random.default_rng(11).integers(len(x), size=(150, blocks))
+            means = np.array([
+                np.mean([x[(start + j) % len(x)] for start in row for j in range(block_length)][:len(x)], axis=0)
+                for row in starts])
+            np.testing.assert_allclose(np.r_[[lo], [hi]], np.quantile(means, [.025, .975], axis=0))
+            np.testing.assert_allclose(p, (1 + (means - x.mean(0) >= x.mean(0)).sum(0)) / 151)
+
+    def test_summary_inference_on_planted_and_fair_draws(self):
+        y = hot_ball(240, seed=0)
+        summary = summarize(walk_forward(y, warmup=60), y)
+        self.assertEqual(summary[0]['total_log_gain'], 0.)
+        self.assertEqual(summary[0]['mean_95pct_block_ci'], [0., 0.])
+        self.assertEqual(summary[0]['one_sided_bootstrap_p'], 1.)
+        p = [row['one_sided_bootstrap_p'] for row in summary[1:]]
+        np.testing.assert_allclose([row['holm_p'] for row in summary[1:]], holm(p))
+        for row in summary[1:]:
+            lo, hi = row['mean_95pct_block_ci']
+            self.assertTrue(0 < lo <= row['mean_log_gain'] <= hi)
+            self.assertLess(row['holm_p'], 0.05)
+        fair = synthetic(240)
+        for row in summarize(walk_forward(fair, warmup=60), fair)[1:]:
+            self.assertGreater(row['holm_p'], 0.05)
 
     def test_uniform_control_and_probability_constraints(self):
         y = synthetic(75)
@@ -135,6 +179,53 @@ class DataAndRunTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         load_draws(path)
 
+    def test_malformed_csv_reports_clean_errors_with_physical_lines(self):
+        header = 'date,draw_id,n1,n2,n3,n4,n5,n6,extra\n'
+        cases = {
+            'short row': (header + '2000-01-01,A,1,2,3,4,5,6,7\n2000-01-02,B,1,2,3,4,5,6\n', 'line 3: Malformed'),
+            'blank lines': (header + '\n\n\n2000-01-01,A,1,2,3,4,5,5,7\n', 'line 5:'),
+            'oversized field': (header + '2000-01-01,' + 'A' * 200000 + ',1,2,3,4,5,6,7\n', 'Malformed CSV'),
+        }
+        for name, (text, message) in cases.items():
+            with self.subTest(name):
+                with self.assertRaisesRegex(ValueError, message):
+                    load_draws_bytes(text.encode())
+
+    def test_cli_rejects_negative_seed_and_applies_every_reset_date(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit) as exit_:
+                main(['demo', '--output', str(root/'negative'), '--draws', '80', '--seed', '-1'])
+            self.assertEqual(exit_.exception.code, 2)
+            self.assertIn('seed must be a non-negative integer', stderr.getvalue())
+            self.assertFalse((root/'negative').exists())
+            with redirect_stdout(io.StringIO()):
+                main(['demo', '--output', str(root/'resets'), '--reset-date', '2002-10-03',
+                      '--reset-date', '2002-12-03'])
+            provenance = json.loads((root/'resets'/'provenance.json').read_text())
+            self.assertEqual(provenance['reset_date'], ['2002-10-03', '2002-12-03'])
+            self.assertEqual(provenance['reset_dates'], ['2002-10-03', '2002-12-03'])
+            self.assertEqual(provenance['reset_indices'], [91, 152])
+
+    def test_failed_publish_leaves_no_partial_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_synthetic(root/'input.csv', draws=65)
+            original_rename = Path.rename
+            calls = []
+
+            def fail_second_move(path, target):
+                calls.append(path)
+                if len(calls) == 2:
+                    raise OSError('simulated failure')
+                return original_rename(path, target)
+
+            with patch.object(Path, 'rename', fail_second_move), self.assertRaises(OSError):
+                run(root/'input.csv', root/'output')
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ['input.csv'])
+            run(root/'input.csv', root/'output')
+            self.assertEqual(len(list((root/'output').iterdir())), 3)
+
     def test_evaluation_preserves_inputs_and_prior_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -152,7 +243,6 @@ class DataAndRunTests(unittest.TestCase):
             self.assertNotIn(str(root), (output/'provenance.json').read_text())
 
     def test_known_machine_change_is_automatic_with_missing_boundary_day(self):
-        from datetime import date, timedelta
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root/'input.csv'
@@ -170,11 +260,31 @@ class DataAndRunTests(unittest.TestCase):
             self.assertIn('2026-05-05', provenance['reset_dates'])
             self.assertIn('2026-04-01', provenance['reset_dates'])
             self.assertFalse(result['betting_eligible'])
-            scores = list(csv.DictReader((root/'output'/'scores.csv').open()))
+            with (root/'output'/'scores.csv').open(newline='') as handle:
+                scores = list(csv.DictReader(handle))
             first_new = [row for row in scores if row['date'] == '2026-05-06']
             self.assertEqual(len(first_new), 4)
             for row in first_new:
                 self.assertAlmostEqual(float(row['log_gain']), 0., places=11)
+
+    def test_draws_before_six_of_49_format_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for first, accepted in [('2002-07-02', False), ('2002-07-04', True)]:
+                source, output = root/f'{first}.csv', root/f'out-{first}'
+                with source.open('w', newline='') as handle:
+                    writer = csv.writer(handle)
+                    writer.writerow(['date', 'draw_id', *(f'n{i}' for i in range(1, 7))])
+                    for i, row in enumerate(synthetic(70)):
+                        day = date.fromisoformat(first) + timedelta(days=i)
+                        writer.writerow([day.isoformat(), str(i), *(np.flatnonzero(row) + 1)])
+                if accepted:
+                    run(source, output)
+                    self.assertTrue(output.exists())
+                else:
+                    with self.assertRaisesRegex(ValueError, '45 or 47 numbers'):
+                        run(source, output, reset_date='2002-07-04')
+                    self.assertFalse(output.exists())
 
     def test_invalid_input_does_not_create_output(self):
         with tempfile.TemporaryDirectory() as directory:

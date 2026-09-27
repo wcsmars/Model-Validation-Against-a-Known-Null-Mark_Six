@@ -67,6 +67,29 @@ def test_uniform_mark_six_reference():
     assert_allclose(marginals(np.zeros(49)), np.full(49, 6 / 49))
 
 
+def test_mark_six_scale_matches_exact_integer_polynomials():
+    # Integer weights give exact elementary symmetric polynomials for n=49.
+    weights = np.random.default_rng(5).integers(1, 6, size=49)
+    table = [1] + [0] * 6
+    for w in weights.tolist():
+        for k in range(6, 0, -1):
+            table[k] += w * table[k - 1]
+    z = np.log(weights)
+    subsets = np.random.default_rng(6).permuted(np.tile(np.arange(49), (20, 1)), axis=1)[:, :6]
+    y = np.zeros((20, 49))
+    np.put_along_axis(y, subsets, 1, axis=1)
+    expected = [math.log(math.prod(weights[s].tolist())) - math.log(table[6]) for s in subsets]
+    assert_allclose(log_probability(z, y), expected, rtol=0, atol=1e-13)
+    excluded = []
+    for i in range(49):
+        rest = [1] + [0] * 5
+        for w in np.delete(weights, i).tolist():
+            for k in range(5, 0, -1):
+                rest[k] += w * rest[k - 1]
+        excluded.append(weights[i] * rest[5] / table[6])
+    assert_allclose(marginals(z), excluded, rtol=1e-13)
+
+
 def test_broadcasted_batches_match_individual_calls():
     z = np.array([[-1, 0.1, 0.4, 1.2], [0.2, 0.7, -0.2, -1.4]])
     y = outcomes(4, 2)
@@ -93,7 +116,7 @@ def test_invalid_draw_sizes(k):
         log_probability(np.ones(4), [1, 1, 0, 0], k)
 
 
-@pytest.mark.parametrize("bad", [[0, np.nan], [0, np.inf], [0, -np.inf], [1 + 1j, 0], 2.0])
+@pytest.mark.parametrize("bad", [[0, np.nan], [0, np.inf], [0, -np.inf], [1 + 1j, 0], 2.0, [10**400, 0]])
 def test_nonfinite_complex_and_scalar_inputs_rejected(bad):
     for operation in (elementary, marginals):
         with pytest.raises(ValueError):

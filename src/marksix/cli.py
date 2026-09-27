@@ -22,25 +22,39 @@ from .probability import UNIFORM_LOGP
 
 # Exogenous generation boundaries, never estimated from outcomes.
 MACHINE_RESET_DATES = ("2010-11-09", "2026-05-05")
+# Earlier Mark Six draws used 45 or 47 numbers, so the 6-of-49 null does not apply.
+FIRST_SIX_OF_49_DRAW = "2002-07-04"
 
 
 def _dump(path, value):
-    path.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8", newline="\n")
 
 
 def run(input_path, output_path, *, warmup=60, reset_date=None, seed=20260914,
         dataset_kind="user_supplied_unverified"):
-    """Evaluate inputs without changing them; refuse to replace any output."""
+    """Evaluate inputs without changing them; refuse to replace any output.
+
+    ``reset_date`` is None, one YYYY-MM-DD string, or a list of them.
+    """
+    if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     output = Path(output_path)
     if output.exists():
         raise ValueError("Output already exists; choose a new directory")
     input_bytes = Path(input_path).read_bytes()
     data = load_draws_bytes(input_bytes)
-    reset_dates = set(MACHINE_RESET_DATES)
-    if reset_date is not None:
-        boundary = date.fromisoformat(reset_date).isoformat()
-        if boundary != reset_date:
-            raise ValueError("reset-date must use YYYY-MM-DD")
+    if data.dates[0] < FIRST_SIX_OF_49_DRAW:
+        raise ValueError(f"Input starts {data.dates[0]}, but draws before {FIRST_SIX_OF_49_DRAW} "
+                         "used 45 or 47 numbers and cannot be scored against the 6-of-49 null")
+    # Synthetic dates are artificial indices, not days on a physical machine.
+    reset_dates = set() if dataset_kind == "synthetic_demo" else set(MACHINE_RESET_DATES)
+    for requested in [reset_date] if isinstance(reset_date, str) else reset_date or ():
+        try:
+            boundary = date.fromisoformat(requested).isoformat()
+        except ValueError:
+            boundary = None
+        if boundary != requested:
+            raise ValueError(f"reset-date must use YYYY-MM-DD, got {requested!r}")
         reset_dates.add(boundary)
     reset_dates = sorted(reset_dates)
     reset_indices = sorted({next((i for i, d in enumerate(data.dates) if d >= boundary),
@@ -91,26 +105,32 @@ def run(input_path, output_path, *, warmup=60, reset_date=None, seed=20260914,
                                      *result["mixture_weights"][row]])
         # Reserving an absent directory prevents a concurrent run being replaced.
         output.mkdir(exist_ok=False)
-        for child in staging.iterdir():
-            child.rename(output / child.name)
+        try:
+            for child in staging.iterdir():
+                child.rename(output / child.name)
+        except BaseException:
+            # This run created the directory, so a partial publish is removed.
+            shutil.rmtree(output, ignore_errors=True)
+            raise
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return summary
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="marksix", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("demo", "evaluate"):
         sub = commands.add_parser(name)
         sub.add_argument("--output", required=True, help="New output directory; existing paths are rejected")
-        sub.add_argument("--warmup", type=int, default=60)
-        sub.add_argument("--seed", type=int, default=20260914)
-        sub.add_argument("--reset-date", help="Additional pre-specified YYYY-MM-DD boundary; known machine changes always reset")
+        sub.add_argument("--warmup", type=int, default=60, help="Initial draws used only for training (default: 60)")
+        sub.add_argument("--seed", type=int, default=20260914, help="Non-negative seed for generation and bootstrap")
+        sub.add_argument("--reset-date", action="append",
+                         help="Additional pre-specified YYYY-MM-DD boundary (repeatable); known machine changes always reset")
         if name == "evaluate":
-            sub.add_argument("--input", required=True)
+            sub.add_argument("--input", required=True, help="CSV with date, draw_id, and n1 through n6")
         else:
-            sub.add_argument("--draws", type=int, default=240)
+            sub.add_argument("--draws", type=int, default=240, help="Synthetic fair draws to generate (default: 240)")
     args = parser.parse_args(argv)
     try:
         if args.command == "demo":
@@ -124,7 +144,8 @@ def main(argv=None):
                           reset_date=args.reset_date, seed=args.seed)
     except (ValueError, OSError) as error:
         parser.exit(2, f"Error: {error}\n")
-    print(f"Evaluated {summary['evaluation_draws']} draws ({summary['dataset_kind']}).")
+    count = summary["evaluation_draws"]
+    print(f"Evaluated {count} draw{'s' * (count != 1)} ({summary['dataset_kind']}).")
     for row in summary["models"]:
         print(f"{row['model']:22} {row['total_log_gain']:+.4f} total log-score nats vs uniform")
     print(f"Saved scores, summary and provenance to {args.output}")

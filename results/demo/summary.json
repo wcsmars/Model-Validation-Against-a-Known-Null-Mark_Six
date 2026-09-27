@@ -4,17 +4,20 @@
   "input_draws": 240,
   "warmup_draws": 60,
   "evaluation_draws": 180,
-  "evaluation_start": "2000-03-01",
-  "evaluation_end": "2000-08-27",
+  "machine_policy": "independent_generation_fit_no_transfer",
+  "betting_eligible": false,
+  "betting_status": "research_scores_only_no_per_line_EV_or_verified_draw_terms",
+  "evaluation_start": "2002-09-02",
+  "evaluation_end": "2003-02-28",
   "models": [
     {
       "model": "uniform",
       "draws": 180,
-      "total_log_gain": -6.394884621840902e-13,
-      "mean_log_gain": -3.552713678800501e-15,
+      "total_log_gain": 0.0,
+      "mean_log_gain": 0.0,
       "mean_95pct_block_ci": [
-        -3.552713678800501e-15,
-        -3.552713678800501e-15
+        0.0,
+        0.0
       ],
       "one_sided_bootstrap_p": 1.0,
       "holm_p": 1.0,
@@ -24,44 +27,44 @@
     {
       "model": "sparse_single_ball",
       "draws": 180,
-      "total_log_gain": -0.1683609904850627,
-      "mean_log_gain": -0.0009353388360281261,
+      "total_log_gain": -0.16836099048510533,
+      "mean_log_gain": -0.0009353388360283629,
       "mean_95pct_block_ci": [
-        -0.0024657660279189743,
-        0.00046533434783124626
+        -0.0024657660279191187,
+        0.00046533434783108596
       ],
       "one_sided_bootstrap_p": 0.8875562218890555,
       "holm_p": 1.0,
       "uncertainty_status": "exploratory_block_bootstrap",
-      "mean_brier_gain": -4.12442271250777e-06
+      "mean_brier_gain": -4.124422712509389e-06
     },
     {
       "model": "spike_slab",
       "draws": 180,
-      "total_log_gain": -0.26717488441446235,
-      "mean_log_gain": -0.0014843049134136799,
+      "total_log_gain": -0.2671748844144375,
+      "mean_log_gain": -0.0014843049134135415,
       "mean_95pct_block_ci": [
-        -0.0037698323790400874,
-        0.0006382006623885787
+        -0.003769832379039893,
+        0.0006382006623886369
       ],
       "one_sided_bootstrap_p": 0.8995502248875562,
       "holm_p": 1.0,
       "uncertainty_status": "exploratory_block_bootstrap",
-      "mean_brier_gain": -6.513741096011608e-06
+      "mean_brier_gain": -6.513741096010066e-06
     },
     {
       "model": "online_mixture",
       "draws": 180,
-      "total_log_gain": -0.10356255457791619,
-      "mean_log_gain": -0.0005753475254328677,
+      "total_log_gain": -0.10356255457756447,
+      "mean_log_gain": -0.0005753475254309138,
       "mean_95pct_block_ci": [
-        -0.00151397034979069,
-        0.0002879144996788591
+        -0.0015139703497885802,
+        0.0002879144996806547
       ],
       "one_sided_bootstrap_p": 0.8875562218890555,
       "holm_p": 1.0,
       "uncertainty_status": "exploratory_block_bootstrap",
-      "mean_brier_gain": -2.540673797692976e-06
+      "mean_brier_gain": -2.5406737976932844e-06
     }
   ],
   "interpretation": "Log-score gains measure forecast quality, not cash return. Synthetic data cannot establish a physical effect."

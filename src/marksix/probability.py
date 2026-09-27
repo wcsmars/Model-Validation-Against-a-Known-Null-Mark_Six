@@ -22,7 +22,7 @@ def _array(value, name: str) -> np.ndarray:
         raise ValueError(f"{name} must contain real numbers")
     try:
         out = np.asarray(raw, dtype=float)
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, OverflowError) as error:
         raise ValueError(f"{name} must contain real numbers") from error
     if out.ndim < 1:
         raise ValueError(f"{name} must have an item axis")

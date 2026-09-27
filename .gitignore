@@ -14,19 +14,36 @@ credentials.yaml
 credentials.yml
 credentials.json
 secrets.*
+secret.*
+token.json
+tokens.json
 credentials/
 private/
 *.key
 *.pem
 *.p12
 *.pfx
+id_rsa*
+id_ed25519*
 
 # Private data and operational records
-data/raw/
-data/private/
+data/
 statements/
 execution_logs/
 *.log
+
+# Draw tables and other datasets; published files are re-included below
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.parquet
+*.feather
+*.db
+*.sqlite
+*.sqlite3
+*.pkl
+*.pickle
 
 # Python and editor artifacts
 __pycache__/
@@ -43,6 +60,14 @@ dist/
 .idea/
 .vscode/
 
-# Additional experiment output
-results/*/
+# Experiment output: only the published artifacts are tracked
+results/*
+!results/research_summary.json
+!results/research_comparison.svg
+!results/demo_comparison.svg
 !results/demo/
+results/demo/*
+!results/demo/provenance.json
+!results/demo/summary.json
+!results/demo/scores.csv
+!results/demo/synthetic_draws.csv

@@ -31,13 +31,16 @@ def walk_forward(y, *, warmup=60, reset_index=None, reset_indices=()):
             or not isinstance(reset_index, (int, np.integer))
             or not 0 <= reset_index <= len(y)):
         raise ValueError("reset_index must lie between zero and the draw count")
-    boundaries = set(reset_indices)
+    try:
+        boundaries = list(reset_indices)
+    except TypeError as error:
+        raise ValueError("reset_indices must be a sequence of draw indices") from error
     if reset_index is not None:
-        boundaries.add(reset_index)
-    if any(isinstance(b, bool) or not isinstance(b, (int, np.integer))
+        boundaries.append(reset_index)
+    if any(isinstance(b, (bool, np.bool_)) or not isinstance(b, (int, np.integer))
            or not 0 <= b <= len(y) for b in boundaries):
         raise ValueError("reset_indices must contain valid draw indices")
-    boundaries = sorted(boundaries)
+    boundaries = sorted(set(boundaries))
     indices = np.arange(warmup, len(y))
     probabilities, all_marginals, mixture_history = [], [], []
     weights = MIXTURE_PRIOR.copy()
@@ -51,6 +54,8 @@ def walk_forward(y, *, warmup=60, reset_index=None, reset_indices=()):
                       log_weights(spike_slab_prediction(history, strength=20, bias_probability=1/49))])
         component_marginals = marginals(z)
         lp = log_probability(z, y[t])
+        # Score the uniform law exactly; the recurrence can round it by an ulp.
+        lp[0] = UNIFORM_LOGP
         mixture_lp = float(logsumexp(np.log(weights) + lp))
         probabilities.append(np.r_[lp, mixture_lp])
         all_marginals.append(np.vstack([component_marginals, weights @ component_marginals]))
@@ -85,9 +90,11 @@ def block_uncertainty(gains, *, seed=20260914, replicates=2000, block_length=8):
     x = np.asarray(gains, dtype=float)
     if x.ndim != 2 or not len(x) or not np.isfinite(x).all():
         raise ValueError("gains must be a nonempty finite matrix")
-    if not isinstance(replicates, int) or isinstance(replicates, bool) or replicates < 100:
+    if (not isinstance(replicates, (int, np.integer)) or isinstance(replicates, bool)
+            or replicates < 100):
         raise ValueError("replicates must be an integer of at least 100")
-    if not isinstance(block_length, int) or isinstance(block_length, bool) or block_length < 1:
+    if (not isinstance(block_length, (int, np.integer)) or isinstance(block_length, bool)
+            or block_length < 1):
         raise ValueError("block_length must be a positive integer")
     n = len(x)
     if n < max(32, 4 * block_length):

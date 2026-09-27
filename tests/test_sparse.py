@@ -1,10 +1,14 @@
 """Validate sparse priors, symmetry, limits, and input boundaries."""
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+from scipy.integrate import quad
+from scipy.stats import beta as beta_distribution
 
 from marksix.probability import log_weights, marginals
-from marksix.sparse import P0, sparse_prediction, spike_slab_prediction
+from marksix.sparse import P0, _log_survival, sparse_prediction, spike_slab_prediction
 
 
 def training_draws(n=80):
@@ -84,6 +88,14 @@ def test_repeated_inclusions_provide_evidence_without_encoding_ball_identity():
     assert_allclose(q.sum(), 6)
 
 
+@pytest.mark.parametrize("hot_only", [False, True])
+def test_tiny_strength_stays_finite_when_a_ball_is_always_drawn(hot_only):
+    y = np.tile(np.r_[np.ones(6), np.zeros(43)], (100, 1))
+    q = sparse_prediction(y, strength=1e-100, hot_only=hot_only)
+    assert np.isfinite(q).all()
+    assert_allclose(q.sum(), 6)
+
+
 def test_full_spike_slab_alternative_has_beta_posterior_mean():
     # With no point mass, beta-Bernoulli conjugacy gives this analytic limit.
     y = training_draws(12)
@@ -115,7 +127,7 @@ def test_invalid_training_draws_rejected(predict, bad):
 
 
 @pytest.mark.parametrize("predict", [sparse_prediction, spike_slab_prediction])
-@pytest.mark.parametrize("strength", [0, -1, np.nan, np.inf, True, [20], "20"])
+@pytest.mark.parametrize("strength", [0, -1, 1e9, np.nan, np.inf, True, [20], "20"])
 def test_invalid_strength_rejected(predict, strength):
     with pytest.raises(ValueError):
         predict(np.empty((0, 49)), strength=strength)
@@ -133,3 +145,43 @@ def test_invalid_prior_mass_rejected(predict, keyword, mass):
 def test_nonboolean_flags_rejected(predict, keyword, value):
     with pytest.raises(ValueError):
         predict(np.empty((0, 49)), **{keyword: value})
+
+
+@pytest.mark.parametrize("hot_only", [False, True])
+def test_log_bayes_factors_match_quadrature(hot_only):
+    # Alternative likelihood relative to the null, integrated over the beta prior.
+    y = training_draws(60)
+    strength = 20
+    _, diagnostics = sparse_prediction(y, strength=strength, hot_only=hot_only, return_diagnostics=True)
+    prior = beta_distribution(strength * P0, strength * (1 - P0))
+    lower = P0 if hot_only else 0
+    expected = []
+    for count in y.sum(axis=0):
+        ratio = lambda p: (p / P0) ** count * ((1 - p) / (1 - P0)) ** (len(y) - count) * prior.pdf(p)
+        expected.append(np.log(quad(ratio, lower, 1, epsabs=0, epsrel=1e-11)[0] / prior.sf(lower)))
+    assert_allclose(diagnostics["log_bayes_factors"], expected, rtol=0, atol=1e-8)
+
+
+def test_survival_fallback_matches_incomplete_beta():
+    pairs = [(2.45, 117.55), (0.5, 40.0), (3.0, 1000.0), (12.45, 160.0)]
+    a, b = np.array(pairs).T
+    direct = _log_survival(a, b)
+    with patch("marksix.sparse.betaincc", return_value=np.zeros(len(pairs))):
+        integrated = _log_survival(a, b)
+    assert_allclose(integrated, direct, rtol=1e-11)
+
+
+def test_hot_posterior_mean_is_smooth_through_subnormal_tail():
+    # Near n=5750 the untruncated survival is subnormal for a never-drawn ball.
+    # E[p | p > P0] must stay above P0 and track the exponential-tail limit.
+    means = []
+    for n in range(5700, 5820, 15):
+        y = np.zeros((n, 49))
+        for i, row in enumerate(y):
+            row[[(6 * i + j) % 48 for j in range(6)]] = 1
+        mean = spike_slab_prediction(y, hot_only=True, bias_probability=1)[48]
+        alpha, beta = 20 * P0, 20 * (1 - P0) + n
+        rate = (beta - 1) / (1 - P0) - (alpha - 1) / P0
+        assert 0.999 < (mean - P0) * rate < 1
+        means.append(mean)
+    assert np.all(np.diff(means) < 0)
