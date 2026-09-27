@@ -1,4 +1,4 @@
-# Mark Six: probabilistic modeling and model validation
+# Mark Six: model validation against a known null
 
 Forecasting Mark Six draws (Hong Kong's 6-of-49 lottery): unordered sets of six distinct numbers from 49, using sparse Bayesian models and chronological evaluation against a uniform baseline.
 
