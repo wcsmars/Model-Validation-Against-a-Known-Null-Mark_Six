@@ -1,0 +1,6 @@
+include LICENSE README.md pyproject.toml
+recursive-include src/marksix *.py
+recursive-include tests *.py
+recursive-include scripts *.py
+recursive-include results *.json *.csv *.svg
+recursive-include .github *.yml

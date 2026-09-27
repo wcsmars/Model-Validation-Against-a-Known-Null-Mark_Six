@@ -31,6 +31,8 @@ def set_style():
 def render_research(source: Path, destination: Path):
     data = json.loads(source.read_text(encoding="utf-8"))
     rows = data["periods"]["new_machine"]
+    draws = rows[0]["draws"]
+    min_holm = min(row["holm_p"] for row in rows if row["model"] != "uniform")
     fig, ax = plt.subplots(figsize=(11.8, 9.5))
     fig.subplots_adjust(left=0.345, right=0.965, top=0.84, bottom=0.16)
     for index, row in enumerate(rows):
@@ -43,7 +45,9 @@ def render_research(source: Path, destination: Path):
     ax.axvline(0, color="#3c4653", linewidth=1.05, linestyle=(0, (4, 4)), zorder=2)
     ax.set_yticks(range(len(rows)), [data["model_labels"][r["model"]] for r in rows])
     ax.set_ylim(len(rows) - 0.4, -0.65)
-    ax.set_xlim(-0.035, 0.14)
+    limits = [v for row in rows for v in row["mean_95pct_block_ci"]]
+    padding = max((max(limits) - min(limits)) * 0.07, 0.005)
+    ax.set_xlim(min(limits) - padding, max(limits) + padding)
     ax.xaxis.set_major_locator(MultipleLocator(0.025))
     ax.xaxis.set_major_formatter(FormatStrFormatter("%.3f"))
     ax.grid(axis="x", color="#e3e8ee", linewidth=0.8, zorder=1)
@@ -55,21 +59,23 @@ def render_research(source: Path, destination: Path):
     fig.text(0.035, 0.956, "Positive estimates remain uncertain", fontsize=22,
              fontweight="bold", color="#1c3048", va="top")
     fig.text(0.035, 0.910,
-             "Historical study · 52 newer-machine draws · all 16 model configurations",
+             f"Corrected historical study · {draws} newer-machine draws · {data['model_count']} model configurations",
              fontsize=12, color="#455468", va="top")
     fig.text(0.035, 0.872,
              "Points: mean gain   |   Bars: 95% whole-draw block-bootstrap intervals",
              fontsize=11, color="#455468", va="top")
     fig.text(0.035, 0.079,
-             "Every nonuniform interval includes zero; all corresponding Holm-adjusted p-values are 1.00.",
+             f"Smallest Holm-adjusted p-value: {min_holm:.4f}. " +
+             ("No improvement established at the 5% familywise level." if min_holm >= 0.05
+              else "An adjusted test is below 0.05; retrospective evidence requires caution."),
              fontsize=11, color="#263648", va="top")
     fig.text(0.035, 0.050,
              "Retrospective exploratory comparison. Source: results/research_summary.json.",
              fontsize=10, color="#5b6877", va="top")
     fig.savefig(destination, metadata={
         "Date": None, "Creator": "Matplotlib",
-        "Title": "Mean log-score gain and uncertainty on 52 newer-machine draws",
-        "Description": "All 16 historical models. Every nonuniform 95% interval crosses zero. Whole-draw block bootstrap; values from research_summary.json.",
+        "Title": f"Mean log-score gain and uncertainty on {draws} newer-machine draws",
+        "Description": f"All {data['model_count']} corrected historical models. Whole-draw block bootstrap; smallest Holm-adjusted p-value {min_holm:.4f}. Values from research_summary.json.",
     })
     plt.close(fig)
     destination.write_text("\n".join(line.rstrip() for line in destination.read_text().splitlines()) + "\n")

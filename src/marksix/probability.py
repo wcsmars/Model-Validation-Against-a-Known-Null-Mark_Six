@@ -11,8 +11,6 @@ import math
 import numbers
 
 import numpy as np
-from scipy.special import logsumexp
-
 UNIFORM_LOGP = -math.log(math.comb(49, 6))
 
 
@@ -74,20 +72,28 @@ def log_weights(q):
     return logits - logits.mean(axis=-1, keepdims=True)
 
 
-def _center(z: np.ndarray) -> np.ndarray:
-    # Adding a common log-weight does not change an exact-k distribution.
-    # Centering and a log-space recurrence avoid exponentiating large logits.
-    with np.errstate(over="raise", invalid="raise"):
-        return z - z.max(axis=-1, keepdims=True)
+def _relative_normalizers(ordered_z: np.ndarray, k: int) -> np.ndarray:
+    """Log normalizers relative to each prefix's most likely subset.
 
-
-def _log_elementary(z: np.ndarray, k: int) -> np.ndarray:
-    result = np.full(z.shape[:-1] + (k + 1,), -np.inf)
-    result[..., 0] = 0
-    for j in range(z.shape[-1]):
-        result[..., 1:] = np.logaddexp(
-            result[..., 1:], z[..., j, None] + result[..., :-1]
-        )
+    Logits must be in descending order. For prefix j and size r, subtracting
+    the energy of its first r items keeps the table between zero and log C(j,r).
+    A max-centered unscaled log normalizer can still lose a factor such as
+    log(2) when required low-weight items have logits near -1e20.
+    """
+    n = ordered_z.shape[-1]
+    result = np.full(ordered_z.shape[:-1] + (n + 1, k + 1), -np.inf)
+    result[..., :, 0] = 0
+    for j in range(1, n + 1):
+        width = min(j, k)
+        # A difference beyond float range is a zero-probability branch at
+        # available precision; all differences are nonpositive, never +inf.
+        with np.errstate(over="ignore"):
+            take = (ordered_z[..., j - 1, None] - ordered_z[..., :width]
+                    + result[..., j - 1, :width])
+        with np.errstate(under="ignore"):
+            result[..., j, 1:width + 1] = np.logaddexp(
+                result[..., j - 1, 1:width + 1], take
+            )
     return result
 
 
@@ -111,9 +117,13 @@ def log_probability(z, y, k=6):
         raise ValueError("z and y batch dimensions must be broadcast-compatible") from error
     if k == 0 or k == z.shape[-1]:
         return np.zeros(z.shape[:-1])
-    centered = _center(z)
-    selected = np.where(y == 1, centered, 0).sum(axis=-1)
-    result = selected - _log_elementary(centered, k)[..., k]
+    ordered = np.sort(z, axis=-1)[..., ::-1]
+    selected = np.sort(np.where(y == 1, z, -np.inf), axis=-1)[..., -k:][..., ::-1]
+    # Pair selected logits with the corresponding best-k logits before
+    # summation, so common huge energies cancel without erasing multiplicity.
+    with np.errstate(over="ignore"):
+        relative_energy = (selected - ordered[..., :k]).sum(axis=-1)
+    result = relative_energy - _relative_normalizers(ordered, k)[..., -1, k]
     # A deterministic set may round a few ulps above zero in the subtraction.
     return np.minimum(result, 0.0)
 
@@ -121,8 +131,9 @@ def log_probability(z, y, k=6):
 def marginals(z, k=6):
     """Return exact conditional-Poisson inclusion probabilities for each item.
 
-    Forward and backward log-polynomial tables evaluate the normalizer with
-    each item excluded. The returned probabilities sum to k within rounding.
+    A normalized log-polynomial table and backward conditional-inclusion
+    recursion avoid cancellation for extreme logits. Probabilities sum to k
+    within rounding.
     """
     z = _array(z, "z")
     n = z.shape[-1]
@@ -131,27 +142,28 @@ def marginals(z, k=6):
         return np.zeros_like(z)
     if k == n:
         return np.ones_like(z)
-    centered = _center(z)
-    shape = z.shape[:-1] + (n + 1, k + 1)
-    forward = np.full(shape, -np.inf)
-    backward = np.full(shape, -np.inf)
-    forward[..., 0, 0] = backward[..., n, 0] = 0
-    for j in range(n):
-        forward[..., j + 1, :] = forward[..., j, :]
-        forward[..., j + 1, 1:] = np.logaddexp(
-            forward[..., j, 1:], centered[..., j, None] + forward[..., j, :-1]
-        )
-    for j in range(n - 1, -1, -1):
-        backward[..., j, :] = backward[..., j + 1, :]
-        backward[..., j, 1:] = np.logaddexp(
-            backward[..., j + 1, 1:],
-            centered[..., j, None] + backward[..., j + 1, :-1],
-        )
-    normalizer = forward[..., n, k]
+    order = np.argsort(z, axis=-1)[..., ::-1]
+    ordered = np.take_along_axis(z, order, axis=-1)
+    normalizers = _relative_normalizers(ordered, k)
+    state = np.zeros(z.shape[:-1] + (k + 1,))
+    state[..., k] = 1
+    ordered_marginals = np.zeros_like(z)
+    for j in range(n, 0, -1):
+        width = min(j, k)
+        with np.errstate(over="ignore"):
+            log_take = (ordered[..., j - 1, None] - ordered[..., :width]
+                        + normalizers[..., j - 1, :width])
+        total = normalizers[..., j, 1:width + 1]
+        with np.errstate(under="ignore"):
+            take = np.exp(np.minimum(log_take - total, 0))
+            skip = np.exp(np.minimum(normalizers[..., j - 1, 1:width + 1] - total, 0))
+        included = state[..., 1:width + 1] * take
+        ordered_marginals[..., j - 1] = included.sum(axis=-1)
+        previous = np.zeros_like(state)
+        previous[..., 0] = state[..., 0]
+        previous[..., :width] += included
+        previous[..., 1:width + 1] += state[..., 1:width + 1] * skip
+        state = previous
     out = np.empty_like(z)
-    for j in range(n):
-        excluded = logsumexp(
-            forward[..., j, :k] + backward[..., j + 1, :k][..., ::-1], axis=-1
-        )
-        out[..., j] = np.exp(np.minimum(centered[..., j] + excluded - normalizer, 0))
+    np.put_along_axis(out, order, ordered_marginals, axis=-1)
     return out

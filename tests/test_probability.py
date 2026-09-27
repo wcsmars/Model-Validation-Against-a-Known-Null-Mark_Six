@@ -61,6 +61,37 @@ def test_extreme_log_weights_do_not_require_exponentiation():
     assert_allclose(marginals(z, 2), np.exp(expected) @ y, atol=1e-12)
 
 
+@pytest.mark.parametrize("scale", [1e20, 1e200, 1e308])
+def test_extreme_required_weights_preserve_tied_subset_multiplicity(scale):
+    # Two equally likely sets remain when the dominant item is compulsory.
+    # Subtracting unscaled log normalizers loses log(2) at this magnitude.
+    z = np.array([0, -scale, -scale])
+    assert_allclose(log_probability(z, [1, 1, 0], 2), -math.log(2), atol=1e-14)
+    assert_allclose(marginals(z, 2), [1, 0.5, 0.5], atol=1e-14)
+
+
+def test_extreme_weights_keep_forced_and_excluded_groups_separate():
+    z = np.array([1e308, -1e308, 0, 0, -1e308])
+    with np.errstate(all="raise"):
+        assert_allclose(marginals(z, 2), [1, 0, 0.5, 0.5, 0], atol=1e-14)
+        assert_allclose(log_probability(z, [1, 0, 1, 0, 0], 2), -math.log(2), atol=1e-14)
+        assert np.isneginf(log_probability(z, [0, 1, 0, 0, 1], 2))
+
+
+def test_enumerated_random_batched_distributions_and_label_permutations():
+    rng = np.random.default_rng(432)
+    for n, k in [(6, 2), (8, 5), (8, 7)]:
+        z = rng.normal(size=(3, n)) * np.array([[0.1], [3], [100]])
+        y = outcomes(n, k)
+        raw = z @ y.T
+        expected = raw - logsumexp(raw, axis=-1, keepdims=True)
+        assert_allclose(log_probability(z[:, None, :], y[None, :, :], k), expected, atol=5e-13)
+        expected_marginals = np.exp(expected) @ y
+        assert_allclose(marginals(z, k), expected_marginals, atol=5e-13)
+        permutation = rng.permutation(n)
+        assert_allclose(marginals(z[:, permutation], k), expected_marginals[:, permutation], atol=5e-13)
+
+
 def test_uniform_mark_six_reference():
     y = np.r_[np.ones(6), np.zeros(43)]
     assert_allclose(log_probability(np.zeros(49), y), UNIFORM_LOGP)

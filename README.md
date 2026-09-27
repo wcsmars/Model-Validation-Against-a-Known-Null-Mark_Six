@@ -2,7 +2,7 @@
 
 Forecasting Mark Six draws (Hong Kong's 6-of-49 lottery): unordered sets of six distinct numbers from 49, using sparse Bayesian models and chronological evaluation against a uniform baseline.
 
-The implementation covers exact set probabilities, inclusion marginals, online model averaging, regime resets, and uncertainty estimates. The included example uses synthetic fair draws. A separate historical comparison covers 16 model configurations over 1,075 draws; it did not establish a predictive edge.
+The implementation covers exact set probabilities, inclusion marginals, online model averaging, regime resets, and uncertainty estimates. The included example uses synthetic fair draws. A separate historical comparison covers 14 model configurations over 1,075 draws; it did not establish a predictive edge.
 
 ## Run
 
@@ -34,7 +34,7 @@ Known machine changes on **9 November 2010** and **5 May 2026** automatically cl
 
 This CLI is a research evaluator and does not authorize a bet. Operational use requires **expected gross payout strictly greater than HK$10 for every full HK$10 line**, under a normalized forecast and stated, verified pre-draw payout inputs. Equality does not qualify. Number predictions must not depend on player popularity, ticket sales, or jackpot size; monetary valuation follows prediction and uses identical sharing assumptions for every combination. No physical chamber or ball measurements are supplied by these statistical models.
 
-The machine replacement is confirmed by [HKJC's April 2026 announcement](https://corporate.hkjc.com/en-US/news-and-publications/corporate-news/2026-04/news_2026042101511). The stored historical aggregates below predate this stricter isolation policy and have not been recomputed under it.
+The machine replacement is confirmed by [HKJC's April 2026 announcement](https://corporate.hkjc.com/en-US/news-and-publications/corporate-news/2026-04/news_2026042101511). The stored historical aggregates below come from the corrected study with independent machine-generation fits; transfer configurations are excluded.
 
 ## Models
 
@@ -72,9 +72,9 @@ The [historical aggregate results](results/research_summary.json) cover 843 deve
 
 ![Historical mean log-score gains and confidence intervals](results/research_comparison.svg)
 
-The strongest newer-machine point estimate was the spike-and-slab reference: **+2.392 total nats**, or **+0.0460 nats per draw**, with a 95% mean interval of **[-0.0214, +0.1286]**. Every nonuniform newer-machine interval includes zero, and all corresponding Holm-adjusted p-values are 1.00. The historical intervals use 3,000 circular block resamples, with five-draw blocks for windows below 100 draws and 20 otherwise. Corrections cover the 15 nonuniform models within each period, not the complete earlier exploratory search.
+The strongest newer-machine point estimate was the nonlinear history-plus-order model at 35% strength: **+2.739 total nats**, or **+0.0527 nats per draw**, with a 95% mean interval of **[-0.0114, +0.1174]**. One other model has an unadjusted interval above zero, but the smallest Holm-adjusted p-value is **0.3292**: no model establishes an improvement at the 5% familywise level. The historical intervals use 3,000 circular block resamples, with five-draw blocks for windows below 100 draws and 20 otherwise. Corrections cover the 13 nonuniform models within each period, not the complete earlier exploratory search.
 
-These aggregates use a broader experimental suite and historical inputs that are not included here. The four-model synthetic example does not reproduce that study. The aggregate file records its source checksum and unrounded metrics. Statistical fit alone does not identify a physical mechanism, and the results remain inconclusive.
+These aggregates use a broader experimental suite and historical inputs that are not included here. The four-model synthetic example does not reproduce that study. The aggregate file records the saved corrected run's results and protocol checksums and unrounded metrics; it is not a refit with every later source revision. Statistical fit alone does not identify a physical mechanism, and the results remain inconclusive.
 
 ## Figures and source
 

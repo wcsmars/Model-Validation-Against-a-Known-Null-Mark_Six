@@ -8,7 +8,18 @@
   "scipy": "1.17.1",
   "seed": 20260914,
   "reset_date": null,
+  "reset_dates": [
+    "2010-11-09",
+    "2026-05-05"
+  ],
+  "reset_indices": [
+    240
+  ],
   "warmup_draws": 60,
+  "machine_policy": "independent_generation_fit_no_transfer",
+  "physical_measurements": "not_available; fitted statistical effects only",
+  "number_selection": "draw_probabilities_only_no_popularity_features",
+  "operational_EV_rule": "expected_gross_HKD_per_full_line > 10; this evaluator does not certify EV",
   "models": [
     "uniform",
     "sparse_single_ball",
@@ -31,10 +42,10 @@
   "source_hashes": {
     "__init__.py": "b06af72ddc20edaa0fccb83b7e2ada9d4064c9c4da8a7601f0dbb2a5a5fcc720",
     "__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
-    "cli.py": "bb6326b432731ab8f8c8b61c0d74501fc90490709ed9ca951aed1c870bfbe9e7",
+    "cli.py": "c35500cdb2431530292ba98c5d260a1236099e1f04e116010350c345824bc731",
     "data.py": "9820697dec86093720dd59a39670dc6b22e3a27848e736e83ec0ff8ad5b30550",
-    "evaluation.py": "98e8b50842411f69cb312e33e1f620fafbd2ac71966f67622eab553990015170",
-    "probability.py": "3663380ad05c66bbc1ff180b392bcac149038adfbb4c117dcd18e798ba6c94db",
+    "evaluation.py": "f60133eac02954217366dbde0b64f56f4b3fd12d5f9c4e367ba614572cebe1d2",
+    "probability.py": "9865068e63db8c2119cf625a731c9a3f6931867e0fde0f3bb38cd33c237ce7f7",
     "sparse.py": "86983f57da623a2349f60046f6181c99df1823a33314a2784be841eae83e5ba7"
   }
 }
